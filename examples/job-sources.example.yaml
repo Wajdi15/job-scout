@@ -1,0 +1,13 @@
+# Example board names. Replace placeholder identifiers before collecting.
+version: 1
+sources:
+  - provider: greenhouse
+    board: example-observatory
+    employer: Example Observatory
+  - provider: lever
+    board: example-lab
+    employer: Example Lab
+    instance: global
+  - provider: bath
+    board: research
+    employer: University of Bath

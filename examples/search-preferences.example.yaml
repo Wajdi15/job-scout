@@ -1,0 +1,49 @@
+# Fictional settings. Use init-profiles to start your private file.
+version: 1
+profiles:
+  industry:
+    regions:
+      preferred: [France, Canada]
+    remote_regions:
+      preferred: [Canada]
+    work_modes:
+      required: [remote, hybrid]
+    titles:
+      preferred: [Data Pipeline Engineer, Backend Engineer]
+      excluded: [Staff Engineer]
+    title_aliases:
+      Data Pipeline Engineer: [Data Infrastructure Engineer]
+    seniority:
+      preferred: [early-career, mid-level]
+    role_types:
+      preferred: [permanent, contract]
+    topics:
+      preferred: [data validation]
+    sponsorship:
+      required: [available]
+    employers:
+      preferred: [Example Observatory]
+    languages:
+      preferred: [English, French]
+    sources:
+      preferred: [greenhouse, lever]
+    max_age_days: 14
+    min_alert_score: 80
+  research:
+    regions:
+      preferred: [Germany, Netherlands]
+    titles:
+      preferred: [Research Engineer, PhD]
+      excluded: [Postdoctoral Researcher]
+    title_aliases:
+      PhD: [Doctoral Candidate]
+    role_types:
+      preferred: [research engineer, PhD]
+    topics:
+      preferred: [scientific computing]
+    phd_funding:
+      required: [funded]
+    sources:
+      preferred: [euraxess, academictransfer]
+    max_age_days: 30
+    min_alert_score: 80
