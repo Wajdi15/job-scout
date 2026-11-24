@@ -15,7 +15,9 @@ def main() -> int:
     init.add_argument("--candidate-facts", help="absolute path to verified candidate facts YAML")
     validate = commands.add_parser("check-profiles", help="validate private search preferences")
     collect = commands.add_parser("collect-jobs", help="fetch configured public job sources")
-    for command in (check, init, validate, collect):
+    rank = commands.add_parser("rank-jobs", help="rank collected postings against private evidence")
+    rank.add_argument("--candidate-facts", help="absolute path to verified candidate facts YAML")
+    for command in (check, init, validate, collect, rank):
         command.add_argument("--data-dir", default=os.environ.get("JOB_SCOUT_DATA_DIR"))
     args = parser.parse_args()
 
@@ -23,6 +25,12 @@ def main() -> int:
         if args.command == "check-data-dir":
             private_data_dir(args.data_dir)
             print("Private data directory is outside the checkout.")
+        elif args.command == "rank-jobs":
+            from .ranking import rank_jobs
+
+            reviewed, shortlisted = rank_jobs(args.candidate_facts, args.data_dir)
+            print(f"Reviewed {reviewed} jobs and shortlisted {shortlisted}.")
+            print("Saved ranked_jobs.html and ranked_jobs.json in private storage.")
         elif args.command == "collect-jobs":
             from .jobs import collect_jobs
             from .sources import load_sources

@@ -23,3 +23,6 @@ search_preferences.yaml
 id_rsa*
 id_ed25519*
 job_sources.yaml
+ranked_jobs.html
+ranked_jobs.json
+.ranking-*

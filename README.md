@@ -2,7 +2,7 @@
 
 An open-source project for finding job openings, explaining the fit against verified experience, and preparing a reviewed résumé for a job you select.
 
-Job Scout includes Codex roles, private search profiles, and public job feed collection. Scoring, scheduling, and résumé generation are planned.
+Job Scout includes Codex roles, private search profiles, public job feed collection, and local job rankings. Scheduling and résumé generation are planned.
 
 ## Set up privately
 
@@ -48,8 +48,30 @@ stay empty when the source omits them.
 Each source reports a count and a status. A failed source does not interrupt
 the other checks, and a partial or failed run exits with status 1. A source
 that returned zero postings can still report success. The watchlist controls
-collection. Profile-based ranking, alerts, and submission preparation are
-separate future steps.
+collection. Rank the collected postings as a separate local step.
+
+## Rank collected jobs privately
+
+Run `python -m job_scout rank-jobs --candidate-facts <absolute-private-facts-path>`
+after collecting postings. If you already hold a `candidate_facts.yaml` in
+the private data directory, you can omit `--candidate-facts`. The command
+uses local files exclusively. It reads the collected job database and saves
+`ranked_jobs.html` and `ranked_jobs.json` next to it.
+
+The HTML has an industry and a research shortlist, with the rest of the
+reviewed jobs also available. Expand a job to see recognized posting criteria,
+the source excerpt, matching evidence IDs, missing evidence, and eligibility.
+Custom titles and aliases affect shortlist ordering. Explicit exclusions,
+expired deadlines, and unmet eligibility stay visible outside the shortlist.
+
+Fit is weighted by criterion priority: required 3, responsibility 2, preferred
+1. Direct evidence earns full credit, technologies listed in a verified role
+60%, related experience 35%, and an evidence gap 0%. The score covers recognized
+technical terms in the available description. A sparse posting can score highly
+on limited evidence, so the shortlist also requires at least two criteria and
+one direct match and a recent source sighting. Sponsorship, degree level, language, funding, and deadline
+checks remain separate. Missing or ambiguous evidence is shown as unknown.
+Open the official posting to confirm the complete requirements before applying.
 
 ## Test
 
