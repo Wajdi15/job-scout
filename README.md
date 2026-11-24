@@ -2,7 +2,7 @@
 
 An open-source project for finding job openings, explaining the fit against verified experience, and preparing a reviewed résumé for a job you select.
 
-The current scaffold includes Codex roles, private storage checks, and editable industry and research search profiles. Live discovery, scoring, scheduling, and résumé generation are planned.
+Job Scout includes Codex roles, private search profiles, and public job feed collection. Scoring, scheduling, and résumé generation are planned.
 
 ## Set up privately
 
@@ -28,6 +28,28 @@ See the [fictional example](examples/search-preferences.example.yaml) for both p
 - Add aliases under the title they refer to. Aliases follow that title's filter level. Use `phd_funding` for PhD postings.
 - Set `max_age_days` and `min_alert_score` to configure future discovery and alerts. The current commands create and validate settings.
 - A missing posting fact, such as sponsorship, should remain unknown during matching. Search preferences guide discovery. Verified evidence and the selected posting guide the résumé.
+
+## Collect job postings
+
+Create `job_sources.yaml` next to your private search preferences. Use the
+[example watchlist](examples/job-sources.example.yaml) as a starting point and
+replace the fictional employer board identifiers.
+
+- **Greenhouse:** use the employer board token from its board URL. [API documentation](https://docs.greenhouse.io/job-board.html)
+- **Lever:** use the site name and set `instance` to `eu` for boards hosted at `jobs.eu.lever.co`. [API documentation](https://github.com/lever/postings-api)
+- **Research:** `provider: bath` with `board: research` uses the university's Education & Research feed. [University of Bath RSS](https://www.bath.ac.uk/jobs/rss/)
+
+Run `python -m job_scout collect-jobs`. The command only sends public board
+identifiers to fixed HTTPS endpoints. It stores job data and source-check
+history in `jobs.sqlite` in private storage. Repeated results update the
+existing job and preserve its first-seen date. Publication dates and deadlines
+stay empty when the source omits them.
+
+Each source reports a count and a status. A failed source does not interrupt
+the other checks, and a partial or failed run exits with status 1. A source
+that returned zero postings can still report success. The watchlist controls
+collection. Profile-based ranking, alerts, and submission preparation are
+separate future steps.
 
 ## Test
 

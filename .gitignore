@@ -22,3 +22,4 @@ search_preferences.yaml
 *.pfx
 id_rsa*
 id_ed25519*
+job_sources.yaml

@@ -39,10 +39,16 @@ def private_data_dir(value: str | Path | None = None) -> Path:
     return resolved
 
 
-def preferences_path(data_dir: str | Path | None = None) -> Path:
-    """Keep the preferences file within the selected private directory."""
+def private_data_file(filename: str, data_dir: str | Path | None = None) -> Path:
+    """Keep a managed file within the selected private directory."""
+    if Path(filename).name != filename or filename in ("", ".", ".."):
+        raise ValueError("Private storage expects a filename.")
     directory = private_data_dir(data_dir)
-    path = directory / "search_preferences.yaml"
-    if private_path(path) != path:
-        raise ValueError("Use a regular file for search_preferences.yaml.")
+    path = directory / filename
+    if private_path(path) != path or (path.exists() and not path.is_file()):
+        raise ValueError("Use regular files in the private data directory.")
     return path
+
+
+def preferences_path(data_dir: str | Path | None = None) -> Path:
+    return private_data_file("search_preferences.yaml", data_dir)

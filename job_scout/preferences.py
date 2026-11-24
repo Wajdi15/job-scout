@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 
 from .storage import preferences_path, private_path
+from .yaml_config import parse_yaml, read_private_yaml
 
 
 PROFILE_NAMES = ("industry", "research")
@@ -21,7 +22,6 @@ CHOICES = {
     "phd_funding": {"funded", "unfunded"},
 }
 LIMITS = {"max_age_days": (1, 365), "min_alert_score": (0, 100)}
-MAX_YAML_BYTES = 512 * 1024
 
 
 @dataclass(frozen=True)
@@ -37,16 +37,6 @@ class SearchProfile:
     title_aliases: dict[str, tuple[str, ...]]
     max_age_days: int | None
     min_alert_score: int | None
-
-
-class UniqueKeyLoader(yaml.SafeLoader):
-    """Reject duplicate mapping keys instead of silently overriding them."""
-
-    def construct_mapping(self, node, deep=False):
-        mapping = super().construct_mapping(node, deep=deep)
-        if len(mapping) != len(node.value):
-            raise ValueError("YAML mapping keys must be unique.")
-        return mapping
 
 
 def _mapping(value, label):
@@ -108,16 +98,9 @@ def _limit(value, name):
     return value
 
 
-def _parse_yaml(text):
-    try:
-        return yaml.load(text, Loader=UniqueKeyLoader)
-    except (yaml.YAMLError, RecursionError):
-        raise ValueError("Invalid YAML. Check indentation, keys, and values.") from None
-
-
 def parse_preferences(text: str) -> dict[str, SearchProfile]:
     """Validate YAML and return the profiles consumed by the scouts."""
-    config = _mapping(_parse_yaml(text), "Preferences")
+    config = _mapping(parse_yaml(text), "Preferences")
     version = config.get("version")
     if set(config) != {"version", "profiles"} or type(version) is not int or version != 1:
         raise ValueError("Specify version: 1 and a profiles mapping.")
@@ -139,26 +122,13 @@ def parse_preferences(text: str) -> dict[str, SearchProfile]:
     return profiles
 
 
-def _read_yaml(path: Path) -> str:
-    if not path.is_file():
-        raise ValueError("The requested private YAML file does not exist or is not a regular file.")
-    try:
-        with path.open("rb") as source:
-            data = source.read(MAX_YAML_BYTES + 1)
-        if len(data) > MAX_YAML_BYTES:
-            raise ValueError("The private YAML file exceeds the size limit.")
-        return data.decode("utf-8-sig")
-    except (OSError, UnicodeError):
-        raise ValueError("Could not read the private YAML file as UTF-8.") from None
-
-
 def load_preferences(data_dir: str | Path | None = None) -> dict[str, SearchProfile]:
-    return parse_preferences(_read_yaml(preferences_path(data_dir)))
+    return parse_preferences(read_private_yaml(preferences_path(data_dir)))
 
 
 def suggested_titles(candidate_facts: str | Path) -> list[str]:
     """Suggest search titles only from experience entries that carry evidence."""
-    facts = _mapping(_parse_yaml(_read_yaml(private_path(candidate_facts))), "Candidate facts")
+    facts = _mapping(parse_yaml(read_private_yaml(private_path(candidate_facts))), "Candidate facts")
     experience = facts.get("experience", [])
     if not isinstance(experience, list):
         raise ValueError("Candidate facts experience must be a list.")

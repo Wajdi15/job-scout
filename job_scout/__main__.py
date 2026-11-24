@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import sqlite3
 
 from .storage import private_data_dir
 
@@ -13,7 +14,8 @@ def main() -> int:
     init = commands.add_parser("init-profiles", help="create private search preferences")
     init.add_argument("--candidate-facts", help="absolute path to verified candidate facts YAML")
     validate = commands.add_parser("check-profiles", help="validate private search preferences")
-    for command in (check, init, validate):
+    collect = commands.add_parser("collect-jobs", help="fetch configured public job sources")
+    for command in (check, init, validate, collect):
         command.add_argument("--data-dir", default=os.environ.get("JOB_SCOUT_DATA_DIR"))
     args = parser.parse_args()
 
@@ -21,6 +23,16 @@ def main() -> int:
         if args.command == "check-data-dir":
             private_data_dir(args.data_dir)
             print("Private data directory is outside the checkout.")
+        elif args.command == "collect-jobs":
+            from .jobs import collect_jobs
+            from .sources import load_sources
+
+            checks = collect_jobs(load_sources(args.data_dir), args.data_dir)
+            for check in checks:
+                detail = f" ({check.detail})" if check.detail else ""
+                print(f"{check.source}: {check.status}, {check.seen} saved or refreshed, "
+                      f"{check.added} new, {check.rejected} rejected{detail}")
+            return 0 if all(check.status == "ok" for check in checks) else 1
         else:
             from .preferences import initialize_preferences, load_preferences
 
@@ -34,6 +46,8 @@ def main() -> int:
         if error.name != "yaml":
             raise
         parser.error("Install dependencies with python -m pip install -r requirements.txt.")
+    except sqlite3.Error:
+        parser.error("Could not update the private jobs database.")
     except (OSError, ValueError) as error:
         parser.error(str(error) if isinstance(error, ValueError) else "Could not access private storage.")
     return 0
