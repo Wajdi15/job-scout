@@ -16,18 +16,33 @@ def default_data_dir() -> Path:
     return Path.home() / ".local" / "share" / "job-scout"
 
 
-def private_data_dir(value: str | Path | None = None) -> Path:
-    """Return a canonical path outside the project checkout."""
+def private_path(value: str | Path) -> Path:
+    """Resolve an absolute path and reject paths in the public checkout."""
     try:
-        path = default_data_dir() if value is None else Path(value).expanduser()
+        path = Path(value).expanduser()
         if not path.is_absolute():
-            raise ValueError("Use an absolute path for the private data directory.")
+            raise ValueError("Use an absolute path for private data.")
         lexical_path = Path(os.path.abspath(path))
         resolved_path = path.resolve()
         if lexical_path.is_relative_to(PROJECT_ROOT) or resolved_path.is_relative_to(PROJECT_ROOT):
-            raise ValueError("Choose a private data directory outside the checkout.")
-        if resolved_path.exists() and not resolved_path.is_dir():
-            raise ValueError("The private data location must be a directory.")
+            raise ValueError("Choose a private data location outside the checkout.")
     except (OSError, RuntimeError):
-        raise ValueError("The private data directory could not be resolved.") from None
+        raise ValueError("The private data location could not be resolved.") from None
     return resolved_path
+
+
+def private_data_dir(value: str | Path | None = None) -> Path:
+    """Return a canonical path to a directory outside the checkout."""
+    resolved = private_path(default_data_dir() if value is None else value)
+    if resolved.exists() and not resolved.is_dir():
+        raise ValueError("The private data location must be a directory.")
+    return resolved
+
+
+def preferences_path(data_dir: str | Path | None = None) -> Path:
+    """Keep the preferences file within the selected private directory."""
+    directory = private_data_dir(data_dir)
+    path = directory / "search_preferences.yaml"
+    if private_path(path) != path:
+        raise ValueError("Use a regular file for search_preferences.yaml.")
+    return path
