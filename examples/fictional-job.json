@@ -1,0 +1,9 @@
+{
+  "fictional": true,
+  "id": "example-01",
+  "title": "Data Pipeline Engineer",
+  "employer": "Example Observatory",
+  "url": "https://example.invalid/jobs/data-pipeline-engineer",
+  "requirement": "Experience building Python data validation tools.",
+  "sponsorship": "unknown"
+}

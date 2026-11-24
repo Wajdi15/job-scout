@@ -1,0 +1,7 @@
+name = "evidence_matcher"
+description = "Map a posting's requirements to supplied verified candidate evidence."
+developer_instructions = """
+Follow the score-jobs skill. Classify requirements and map them to the supplied
+evidence identifiers. Return gaps and unknowns. Report eligibility separately
+from fit and link each eligibility determination to its source.
+"""
