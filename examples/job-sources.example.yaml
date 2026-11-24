@@ -8,6 +8,9 @@ sources:
     board: example-lab
     employer: Example Lab
     instance: global
+  - provider: smartrecruiters
+    board: example-company
+    employer: Example Company
   - provider: bath
     board: research
     employer: University of Bath

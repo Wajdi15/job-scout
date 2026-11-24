@@ -28,3 +28,6 @@ ranked_jobs.json
 .ranking-*
 tailor_engine.yaml
 .tailor-*
+research_jobs.json
+research_verification.json
+search_run.json

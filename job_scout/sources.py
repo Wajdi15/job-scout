@@ -22,6 +22,7 @@ TOKEN = re.compile(r"[A-Za-z0-9_-]{1,100}\Z")
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 PAGE_SIZE = 100
 MAX_PAGES = 10
+SMART_LIMIT = 30
 BATH_FEED = "https://www.bath.ac.uk/jobs/rss/rss.aspx?cat=391"
 
 
@@ -55,6 +56,7 @@ class Posting:
 class Batch:
     postings: list[Posting]
     rejected: int = 0
+    partial: bool = False
 
 
 class SourceError(Exception):
@@ -80,8 +82,8 @@ def parse_sources(text: str) -> list[Source]:
             raise ValueError(f"Source {index} has invalid fields.")
         provider, board, employer = (entry.get(key) for key in ("provider", "board", "employer"))
         instance = entry.get("instance", "global")
-        if provider not in ("greenhouse", "lever", "bath"):
-            raise ValueError(f"Source {index} must use greenhouse, lever, or bath.")
+        if provider not in ("greenhouse", "lever", "bath", "smartrecruiters"):
+            raise ValueError(f"Source {index} must use greenhouse, lever, smartrecruiters, or bath.")
         if not isinstance(board, str) or not TOKEN.fullmatch(board):
             raise ValueError(f"Source {index} requires a board identifier, without a URL.")
         if not isinstance(employer, str) or not employer.strip() or len(employer) > 120:
@@ -348,5 +350,65 @@ def _bath(source, fetch):
     return _batch(root.findall("./channel/item"), convert)
 
 
+def _smartrecruiters(source, fetch):
+    base = f"https://api.smartrecruiters.com/v1/companies/{source.board}/postings"
+    raw = _json(fetch, f"{base}?limit={SMART_LIMIT}&offset=0")
+    if not isinstance(raw, dict) or not isinstance(raw.get("content"), list):
+        raise SourceError("Unexpected SmartRecruiters feed structure")
+    rows = raw["content"]
+    partial = len(rows) > SMART_LIMIT or (
+        type(raw.get("totalFound")) is int and raw["totalFound"] > len(rows)
+    )
+
+    def convert(row):
+        if not isinstance(row, dict) or not isinstance(row.get("id"), str) or not row["id"].isdigit():
+            return None
+        try:
+            detail = _json(fetch, f"{base}/{row['id']}")
+        except SourceError:
+            return None
+        if not isinstance(detail, dict) or detail.get("active") is not True or detail.get("visibility") != "PUBLIC":
+            return None
+        title = _text(detail.get("name"))
+        url = canonical_url(detail.get("postingUrl"))
+        if not title or not url or urlsplit(url).hostname != "jobs.smartrecruiters.com":
+            return None
+        # The posting ID appears at the front of the official site's last path segment.
+        parts = urlsplit(url)
+        if parts.path.rsplit("/", 1)[-1].split("-", 1)[0] != row["id"]:
+            return None
+        url = urlunsplit(("https", parts.netloc, parts.path, "", ""))
+        company = detail.get("company")
+        location = detail.get("location")
+        location = location if isinstance(location, dict) else {}
+        contract = detail.get("typeOfEmployment")
+        ad = detail.get("jobAd")
+        sections = ad.get("sections") if isinstance(ad, dict) else None
+        sections = sections if isinstance(sections, dict) else {}
+        descriptions = []
+        for section_key, heading in (("jobDescription", "Responsibilities"), ("qualifications", "Requirements"),
+                                     ("additionalInformation", "")):
+            section = sections.get(section_key)
+            text = _plain(section.get("text")) if isinstance(section, dict) else ""
+            if text:
+                descriptions.append(f"{heading}: {text}" if heading else text)
+        return Posting(
+            row["id"], title, (_text(company.get("name")) if isinstance(company, dict) else "") or source.employer,
+            url, description="\n".join(descriptions)[:50000],
+            location=_text(location.get("fullLocation")) or ", ".join(
+                part for key in ("city", "region", "country") if (part := _text(location.get(key)))
+            ),
+            workplace="hybrid" if location.get("hybrid") is True else "remote" if location.get("remote") is True else "",
+            role_type=_text(contract.get("label")) if isinstance(contract, dict) else "",
+            published_at=_iso(detail.get("releasedDate")), deadline=_iso(detail.get("applicationDeadline")),
+        )
+
+    batch = _batch(rows[:SMART_LIMIT], convert)
+    return Batch(batch.postings, batch.rejected, partial=partial)
+
+
 def fetch_source(source: Source, fetch: Callable[[str, str], bytes] = download) -> Batch:
-    return {"greenhouse": _greenhouse, "lever": _lever, "bath": _bath}[source.provider](source, fetch)
+    return {
+        "greenhouse": _greenhouse, "lever": _lever, "bath": _bath,
+        "smartrecruiters": _smartrecruiters,
+    }[source.provider](source, fetch)

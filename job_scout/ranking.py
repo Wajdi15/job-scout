@@ -14,6 +14,7 @@ from .jobs import DATABASE_NAME
 from .matching import extract_criteria, load_candidate, match_criteria, normalized, phrase_pattern
 from .preferences import SearchProfile, load_preferences
 from .sources import canonical_url
+from .research import RESEARCH_MARKER, RESEARCH_PROVIDER_NAMES
 from .storage import private_data_file
 
 
@@ -87,7 +88,7 @@ def _is_older(value, max_days, now):
 
 
 def _profile_name(posting):
-    if any(source.startswith("bath:") for source in posting["sources"]):
+    if any(source.split(":", 1)[0] in RESEARCH_PROVIDER_NAMES | {"bath"} for source in posting["sources"]):
         return "research"
     title = posting["title"]
     return "research" if phd_title(title) or RESEARCH_ROLE.search(normalized(title)) else "industry"
@@ -142,6 +143,7 @@ def rank_posting(posting, profile: SearchProfile, candidate, now):
         "id": posting["id"], "title": posting["title"], "employer": posting["employer"],
         "url": canonical_url(posting["url"]), "location": posting["location"],
         "sources": posting["sources"], "published_at": posting["published_at"], "deadline": posting["deadline"],
+        "public_page_summary": bool(posting["sources"]) and all(RESEARCH_MARKER in source for source in posting["sources"]),
         "first_seen": posting["first_seen"], "last_seen": posting["last_seen"],
         "fit_score": score, "match_count": len(matches), "direct_matches": evidence_matches,
         "criteria": matches, "eligibility": status, "eligibility_checks": checks,
@@ -197,6 +199,8 @@ def _card(job):
     excluded = "".join(f"<li>{_e(item)}</li>" for item in job["excluded"])
     metadata = (f'Job #{job["id"]} · {_e(job["location"] or "Location unconfirmed")}'
                 f' · First seen {_e(job["first_seen"][:10])} · Last seen {_e(job["last_seen"][:10])}')
+    if job.get("public_page_summary"):
+        metadata += " · Requirements summarized from the public posting"
     return (f"<details><summary>{summary}</summary><p>{metadata}</p>"
             + (f"<p>Outside search preferences</p><ul>{excluded}</ul>" if excluded else "")
             + f"<h4>Eligibility</h4><ul>{eligibility}</ul><h4>Why it matches and where it falls short</h4>"
@@ -206,15 +210,35 @@ def _card(job):
 
 def render_report(report):
     sections = []
+    selected = set(report.get("new_shortlist", []))
     for name, label in (("industry", "Industry"), ("research", "Research and PhD")):
         jobs = report["profiles"][name]
-        shortlisted = [job for job in jobs if job["shortlist"]][:SHORTLIST_LIMIT]
+        if "new_shortlist" in report:
+            shortlisted = [job for job in jobs if job["id"] in selected]
+        else:
+            shortlisted = [job for job in jobs if job["shortlist"]][:SHORTLIST_LIMIT]
         included = {job["id"] for job in shortlisted}
         others = [job for job in jobs if job["id"] not in included]
         cards = "".join(_card(job) for job in shortlisted) or "<p>No postings met the shortlist criteria.</p>"
         rest = "".join(_card(job) for job in others)
         sections.append(f"<section><h2>{label} · {len(jobs)} jobs</h2>{cards}"
                         f"<details><summary>Other reviewed postings ({len(others)})</summary>{rest}</details></section>")
+    search_details = ""
+    if "new_shortlist" in report:
+        count = len(selected)
+        coverage = "".join(
+            f'<li>{_e(check["source"])} · {_e(check["status"])} · {check["seen"]} seen · {check["added"]} new'
+            f' · {check["rejected"]} rejected</li>'
+            for check in report["coverage"]
+        )
+        skipped = ", ".join(report["skipped_research"])
+        search_details = (
+            f"<p><b>{count} new shortlisted jobs</b> · target 30–50</p>"
+            + ("<p>Fewer results met the ranking and eligibility criteria on this run.</p>" if count < 30 else "")
+            + f"<details><summary>Sources checked</summary><ul>{coverage}</ul>"
+            + (f"<p>Web research skipped: {_e(skipped)}</p>" if skipped else "")
+            + "</details>"
+        )
     return (
         '<!doctype html><html lang="en"><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -231,11 +255,12 @@ def render_report(report):
         'Required criteria carry 3 points, responsibilities 2, and preferred criteria 1. '
         'Direct evidence earns full credit, listed experience 60%, related experience 35%, and gaps 0%. '
         'Open a job to see the evidence and eligibility checks.</p>'
-        + "".join(sections) + "</body></html>"
+        + search_details + "".join(sections) + "</body></html>"
     )
 
 
-def rank_jobs(candidate_facts=None, data_dir=None, *, now=None):
+def rank_jobs(candidate_facts=None, data_dir=None, *, now=None, new_since=None,
+              coverage=(), skipped_research=()):
     profiles = load_preferences(data_dir)
     source = candidate_facts if candidate_facts is not None else private_data_file("candidate_facts.yaml", data_dir)
     candidate = load_candidate(source)
@@ -252,6 +277,16 @@ def rank_jobs(candidate_facts=None, data_dir=None, *, now=None):
                                for jobs in grouped.values()),
         "profiles": grouped,
     }
+    if new_since is not None:
+        fresh = [
+            job for jobs in grouped.values() for job in jobs
+            if job["shortlist"] and datetime.fromisoformat(job["first_seen"]) >= new_since
+        ]
+        fresh.sort(key=_order)
+        report["new_shortlist"] = [job["id"] for job in fresh[:50]]
+        report["shortlist_count"] = len(report["new_shortlist"])
+        report["coverage"] = coverage
+        report["skipped_research"] = skipped_research
     json_path = private_data_file(REPORT_JSON, data_dir)
     html_path = private_data_file(REPORT_HTML, data_dir)
     _atomic_write(json_path, json.dumps(report, ensure_ascii=False, indent=2) + "\n")

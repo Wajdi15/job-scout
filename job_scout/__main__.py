@@ -20,10 +20,16 @@ def main() -> int:
     check_tailor = commands.add_parser("check-tailor", help="check the private résumé workflow")
     select = commands.add_parser("select-job", help="recheck and hand off one selected job")
     select.add_argument("job_id", type=int)
+    select.add_argument("--research-verification", help="fresh private verification for a public-page posting")
+    link = commands.add_parser("job-link", help="print only the public URL for a selected ranking ID")
+    link.add_argument("job_id", type=int)
+    search = commands.add_parser("search", help="collect, optionally import public research, and rank new jobs")
+    search.add_argument("--candidate-facts", help="absolute path to verified candidate facts YAML")
+    search.add_argument("--research", help="absolute path to a private public-research bundle")
     stage = commands.add_parser("tailor-stage", help="run an existing local résumé quality gate")
     stage.add_argument("stage", choices=("snapshot", "compile", "validate"))
     stage.add_argument("application_dir")
-    for command in (check, init, validate, collect, rank, check_tailor, select, stage):
+    for command in (check, init, validate, collect, rank, check_tailor, select, stage, search, link):
         command.add_argument("--data-dir", default=os.environ.get("JOB_SCOUT_DATA_DIR"))
     args = parser.parse_args()
 
@@ -31,6 +37,26 @@ def main() -> int:
         if args.command == "check-data-dir":
             private_data_dir(args.data_dir)
             print("Private data directory is outside the checkout.")
+        elif args.command == "search":
+            from .search import search as run_search
+
+            summary = run_search(args.candidate_facts, args.data_dir, research_file=args.research)
+            print(f"Reviewed {summary['reviewed']} jobs; {summary['new_postings']} new postings; "
+                  f"{summary['new_matches']} new shortlist matches.")
+            failed = sum(check["status"] != "ok" for check in summary["coverage"])
+            print(f"Sources checked: {len(summary['coverage'])}; partial or failed: {failed}.")
+            if summary["skipped_research"]:
+                print(f"Public research sources skipped: {len(summary['skipped_research'])}.")
+            print("Saved the shortlist and coverage report in private storage.")
+            return 1 if failed else 0
+        elif args.command == "job-link":
+            from .tailoring import _report_choice
+            from .sources import canonical_url
+
+            url = canonical_url(_report_choice(args.job_id, args.data_dir).get("url"))
+            if not url:
+                raise ValueError("This posting has no verified public URL.")
+            print(url)
         elif args.command in ("check-tailor", "select-job", "tailor-stage"):
             from .tailoring import load_engine, run_stage, select_job
 
@@ -38,7 +64,7 @@ def main() -> int:
                 load_engine(args.data_dir)
                 print("The existing private Writer, Reviewer Panel, and résumé scripts are available.")
             elif args.command == "select-job":
-                folder = select_job(args.job_id, args.data_dir)
+                folder = select_job(args.job_id, args.data_dir, verification=args.research_verification)
                 print(f"Selected job rechecked. Open {folder / 'START_HERE.md'} to start the private workflow.")
             else:
                 run_stage(args.stage, args.application_dir, args.data_dir)

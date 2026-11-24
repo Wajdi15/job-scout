@@ -6,9 +6,42 @@ Find jobs, see why they fit your verified experience, and hand a selected role t
 
 ## What works today
 
-- Collect public postings from Greenhouse, Lever, and the University of Bath’s research feed.
+- Collect public postings from Greenhouse, Lever, SmartRecruiters, and the University of Bath’s research feed.
 - Rank industry and research roles separately. See the posting text, evidence behind each match, gaps, and unresolved eligibility requirements.
-- Select a job from the private report, verify it against the official feed, and hand it to an existing résumé Writer and independent Reviewer Panel.
+- Select a job from the private report, recheck the official listing, and hand it to an existing résumé Writer and independent Reviewer Panel.
+
+## One-word search
+
+Open the Job Scout checkout in Codex and type **`search`**. The
+[`discover-jobs`](.agents/skills/discover-jobs/SKILL.md) workflow checks public
+pages on Workable, SmartRecruiters, EURAXESS, Inria, Fraunhofer,
+AcademicTransfer, and Ashby. Job Scout refreshes the configured feeds and
+merges verified web findings with them. Candidate facts are used only for
+local ranking.
+
+To run the configured feeds from a terminal, use:
+
+```sh
+python -m job_scout search
+```
+
+Use `search --research "/absolute/private/path/research_jobs.json"` to import
+a fresh web research bundle. [See the bundle format and sources.](.agents/skills/discover-jobs/references/public-research.md)
+The command uses the private candidate facts file or the configured private
+engine's verified facts. Use `--candidate-facts` to specify a different local
+file.
+
+The private report shows up to 50 newly seen jobs that meet the shortlist
+criteria, alongside source coverage and failures. Thirty is a target.
+Older and lower-ranked results remain available in the full report. The
+terminal returns a nonzero status for partial or failed sources, while still
+saving the results it could verify. See the report or `search_run.json` in
+private storage for coverage details.
+
+For wider coverage, add employer boards to the private watchlist. A feed can
+find postings before they show up in web search, and public research reaches
+employers whose boards you have not configured. The report records which
+sources ran, so you can see where to expand your watchlist or check manually.
 
 ## Quick start
 
@@ -38,6 +71,7 @@ The default private folder is `%LOCALAPPDATA%\JobScout` on Windows and `~/.local
 | --- | --- |
 | [Greenhouse](https://docs.greenhouse.io/job-board.html) | Use the employer’s board token. |
 | [Lever](https://github.com/lever/postings-api) | Use the site name. Set `instance: eu` for boards on `jobs.eu.lever.co`. |
+| [SmartRecruiters](https://developers.smartrecruiters.com/docs/endpoints) | Use the employer identifier. Each feed check reads up to 30 postings and reports partial coverage when the board has more. |
 | [University of Bath](https://www.bath.ac.uk/jobs/rss/) | Use `provider: bath` and `board: research` for the Education & Research feed. |
 
 The watchlist controls which feeds are checked. Collection records each source’s status separately, so a failed request is distinguishable from a feed with zero postings. Duplicate sightings update the local job record and preserve when it was first seen.
@@ -70,7 +104,7 @@ Eligibility is shown separately as **met**, **unmet**, or **unknown**. Unstated 
 
 ## Agents and skills
 
-Agents describe who does the work. Skills define the workflow and what evidence to return. These definitions support interactive Codex sessions. The Python commands above run without launching them.
+Agents describe who does the work. Skills define the workflow and what evidence to return. These definitions support interactive Codex sessions. The Python commands above run without launching them. The Codex `search` prompt joins web research to local processing.
 
 | Agent | Skill | Responsibility |
 | --- | --- | --- |
@@ -104,4 +138,4 @@ Collection and selected-job checks use public source endpoints. Ranking reads lo
 
 Run `python -m unittest discover -s tests -v` after installing dependencies. The tests use fictional data and cover source parsing, deduplication, evidence matching, eligibility, and the private handoff. See [repository instructions](AGENTS.md), the [MIT license](LICENSE), and [private security reporting](SECURITY.md).
 
-**Next milestone:** local scheduling, daily shortlists, and alerts for new strong matches.
+**V1 runs on demand.** Scheduling, daily digests, and alerts are planned for V2.

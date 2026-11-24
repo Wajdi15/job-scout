@@ -90,7 +90,7 @@ class SourceTests(unittest.TestCase):
     def test_watchlist_rejects_urls_as_board_identifiers(self):
         example = PROJECT_ROOT / "examples" / "job-sources.example.yaml"
         text = example.read_text(encoding="utf-8")
-        self.assertEqual([source.provider for source in parse_sources(text)], ["greenhouse", "lever", "bath"])
+        self.assertEqual([source.provider for source in parse_sources(text)], ["greenhouse", "lever", "smartrecruiters", "bath"])
         with self.assertRaisesRegex(ValueError, "without a URL"):
             parse_sources(text.replace("example-observatory", "https://example.invalid"))
 

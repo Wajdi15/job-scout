@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import os
 import sqlite3
 
+from .research import RESEARCH_MARKER
 from .sources import Batch, Posting, Source, SourceError, fetch_source
 from .storage import private_data_file
 
@@ -100,16 +101,27 @@ def _upsert(connection, source: str, item: Posting, seen: str) -> int:
             )
             connection.execute("UPDATE posting_sources SET job_id = ? WHERE job_id = ?", (job_id, obsolete))
             connection.execute("DELETE FROM postings WHERE id = ?", (obsolete,))
-        connection.execute(
-            """
-            UPDATE postings
-            SET url = ?, title = ?, employer = ?, description = ?, location = ?, workplace = ?, role_type = ?,
-                published_at = coalesce(?, published_at), deadline = ?,
-                first_seen = min(first_seen, ?), last_seen = max(last_seen, ?)
-            WHERE id = ?
-            """,
-            (*values, seen, seen, job_id),
+        has_feed_record = RESEARCH_MARKER in source and _one(
+            connection,
+            "SELECT 1 FROM posting_sources WHERE job_id = ? AND source NOT LIKE ? LIMIT 1",
+            (job_id, f"%{RESEARCH_MARKER}%"),
         )
+        if has_feed_record:
+            connection.execute(
+                "UPDATE postings SET first_seen = min(first_seen, ?), last_seen = max(last_seen, ?) WHERE id = ?",
+                (seen, seen, job_id),
+            )
+        else:
+            connection.execute(
+                """
+                UPDATE postings
+                SET url = ?, title = ?, employer = ?, description = ?, location = ?, workplace = ?, role_type = ?,
+                    published_at = coalesce(?, published_at), deadline = ?,
+                    first_seen = min(first_seen, ?), last_seen = max(last_seen, ?)
+                WHERE id = ?
+                """,
+                (*values, seen, seen, job_id),
+            )
     connection.execute(
         """
         INSERT INTO posting_sources (source, posting_id, job_id, first_seen, last_seen)
@@ -152,7 +164,7 @@ def collect_jobs(
             with connection:
                 connection.execute("BEGIN IMMEDIATE")
                 added = sum(_upsert(connection, source.key, item, seen) for item in batch.postings)
-                status = "error" if error else "partial" if batch.rejected else "ok"
+                status = "error" if error else "partial" if batch.rejected or batch.partial else "ok"
                 check = Check(source.key, status, len(batch.postings), added, batch.rejected, error)
                 connection.execute(
                     """
