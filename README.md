@@ -1,12 +1,18 @@
 # Job Scout
 
-An open-source project for finding job openings, explaining the fit against verified experience, and preparing a reviewed résumé for a job you select.
+Find jobs, see why they fit your verified experience, and hand a selected role to your existing résumé workflow. **Job Scout runs on demand and keeps search settings, rankings, and application files on your machine.**
 
-Job Scout includes Codex roles, private search profiles, public job feed collection, local job rankings, and a handoff to an existing private résumé workflow. Scheduling is planned.
+[Quick start](#quick-start) · [Architecture](#architecture) · [Agents and skills](#agents-and-skills) · [Privacy](#privacy-and-storage)
 
-## Set up privately
+## What works today
 
-With Python 3.12 or newer, from the project root:
+- Collect public postings from Greenhouse, Lever, and the University of Bath’s research feed.
+- Rank industry and research roles separately. See the posting text, evidence behind each match, gaps, and unresolved eligibility requirements.
+- Select a job from the private report, verify it against the official feed, and hand it to an existing résumé Writer and independent Reviewer Panel.
+
+## Quick start
+
+Run these commands from the checkout with Python 3.12 or newer:
 
 ```sh
 python -m pip install -r requirements.txt
@@ -15,91 +21,87 @@ python -m job_scout init-profiles
 python -m job_scout check-profiles
 ```
 
-The defaults are `%LOCALAPPDATA%\JobScout` on Windows and `~/.local/share/job-scout` elsewhere. Set `JOB_SCOUT_DATA_DIR` to an absolute path or pass `--data-dir` to change the location. Paths inside the public checkout are rejected, including symlinks into it.
+1. **Set your search preferences.** Edit `search_preferences.yaml` in your private data folder. The [fictional example](examples/search-preferences.example.yaml) shows Industry and Research profiles with regions, title aliases, sponsorship, funding, and freshness filters. Add `--candidate-facts "/absolute/path/to/candidate_facts.yaml"` to `init-profiles` if you want title suggestions from your verified experience. Initialization preserves an existing profile.
+2. **Create your watchlist.** Copy the [example watchlist](examples/job-sources.example.yaml) to `job_sources.yaml` in the private data folder. Replace the fictional employer IDs with real board IDs.
+3. **Collect and rank.** Run the commands below, then open `ranked_jobs.html` from your private data folder. Replace the example path with your verified facts file. You can omit `--candidate-facts` if that file is already named `candidate_facts.yaml` in private storage.
 
-To seed industry title suggestions from verified experience, pass `--candidate-facts` followed by the absolute path to a private candidate facts YAML file when running `init-profiles`. It uses experience entries with evidence to suggest titles and leaves that file untouched. You can edit or add any search title. If you have already created `search_preferences.yaml`, edit it in your private folder. Initialization preserves existing settings.
+```sh
+python -m job_scout collect-jobs
+python -m job_scout rank-jobs --candidate-facts "/absolute/path/to/candidate_facts.yaml"
+```
 
-## Search profiles
+The default private folder is `%LOCALAPPDATA%\JobScout` on Windows and `~/.local/share/job-scout` elsewhere. Set `JOB_SCOUT_DATA_DIR` or pass `--data-dir` to use a different absolute path outside the checkout.
 
-See the [fictional example](examples/search-preferences.example.yaml) for both profiles and all supported fields.
+### Supported sources
 
-- Set `required`, `preferred`, and `excluded` values per filter. Values within a list are alternatives. Required filters across different fields apply together. Preferred values guide ranking.
-- Use `regions` for job location and `remote_regions` for countries where a remote employer allows you to work.
-- Add aliases under the title they refer to. Aliases follow that title's filter level. Use `phd_funding` for PhD postings.
-- Set `max_age_days` and `min_alert_score` to configure future discovery and alerts. The current commands create and validate settings.
-- A missing posting fact, such as sponsorship, should remain unknown during matching. Search preferences guide discovery. Verified evidence and the selected posting guide the résumé.
+| Provider | Watchlist setting |
+| --- | --- |
+| [Greenhouse](https://docs.greenhouse.io/job-board.html) | Use the employer’s board token. |
+| [Lever](https://github.com/lever/postings-api) | Use the site name. Set `instance: eu` for boards on `jobs.eu.lever.co`. |
+| [University of Bath](https://www.bath.ac.uk/jobs/rss/) | Use `provider: bath` and `board: research` for the Education & Research feed. |
 
-## Collect job postings
+The watchlist controls which feeds are checked. Collection records each source’s status separately, so a failed request is distinguishable from a feed with zero postings. Duplicate sightings update the local job record and preserve when it was first seen.
 
-Create `job_sources.yaml` next to your private search preferences. Use the
-[example watchlist](examples/job-sources.example.yaml) as a starting point and
-replace the fictional employer board identifiers.
+## Architecture
 
-- **Greenhouse:** use the employer board token from its board URL. [API documentation](https://docs.greenhouse.io/job-board.html)
-- **Lever:** use the site name and set `instance` to `eu` for boards hosted at `jobs.eu.lever.co`. [API documentation](https://github.com/lever/postings-api)
-- **Research:** `provider: bath` with `board: research` uses the university's Education & Research feed. [University of Bath RSS](https://www.bath.ac.uk/jobs/rss/)
+```mermaid
+flowchart LR
+    A["Official job feeds"] --> B["Collect, deduplicate, store in SQLite"]
+    B --> C["Rank and assess eligibility locally"]
+    P["Private search settings and verified facts"] --> C
+    C --> D["Private industry and research shortlists"]
+    D --> E["You select a job"]
+    E --> F["Recheck the posting and create a private handoff"]
+    F --> G["Existing Writer and independent Reviewer Panel"]
+    G --> H["Compile, visually review, and validate one A4 page"]
+    H --> I["Record Prepared locally"]
+    I --> J["You submit on the employer site"]
+```
 
-Run `python -m job_scout collect-jobs`. The command only sends public board
-identifiers to fixed HTTPS endpoints. It stores job data and source-check
-history in `jobs.sqlite` in private storage. Repeated results update the
-existing job and preserve its first-seen date. Publication dates and deadlines
-stay empty when the source omits them.
+The Python commands handle collection, ranking, and local handoff checks. The résumé writing and independent review start separately in your existing workflow after you select a job.
 
-Each source reports a count and a status. A failed source does not interrupt
-the other checks, and a partial or failed run exits with status 1. A source
-that returned zero postings can still report success. The watchlist controls
-collection. Rank the collected postings as a separate local step.
+### How ranking works
 
-## Rank collected jobs privately
+The fit score compares recognized technical criteria in the posting with verified candidate evidence. Required criteria carry three points, responsibilities two, and preferred criteria one. Direct evidence earns full credit, verified role technologies earn 60%, transferable experience earns 35%, and unsupported criteria earn zero. A job needs a fit score of at least 50, a recent sighting in its source feed, two recognized criteria, and one direct match to qualify for the shortlist. Each profile shows up to ten shortlisted jobs.
 
-Run `python -m job_scout rank-jobs --candidate-facts <absolute-private-facts-path>`
-after collecting postings. If you already hold a `candidate_facts.yaml` in
-the private data directory, you can omit `--candidate-facts`. The command
-uses local files exclusively. It reads the collected job database and saves
-`ranked_jobs.html` and `ranked_jobs.json` next to it.
+Search profiles use `required`, `preferred`, and `excluded` filters. Values within one required filter are alternatives. Required filters across fields apply together. Preferences help order results. For remote roles, `remote_regions` records where you need to be allowed to work.
 
-The HTML has an industry and a research shortlist, with the rest of the
-reviewed jobs also available. Expand a job to see recognized posting criteria,
-the source excerpt, matching evidence IDs, missing evidence, and eligibility.
-Custom titles and aliases affect shortlist ordering. Explicit exclusions,
-expired deadlines, and unmet eligibility stay visible outside the shortlist.
+Eligibility is shown separately as **met**, **unmet**, or **unknown**. Unstated sponsorship stays unknown. Open a role to see the evidence IDs, source excerpts, and checks for deadlines, funding, degrees, and language where applicable. The HTML report also retains other reviewed roles, including those outside your preferences.
 
-Fit is weighted by criterion priority: required 3, responsibility 2, preferred
-1. Direct evidence earns full credit, technologies listed in a verified role
-60%, related experience 35%, and an evidence gap 0%. The score covers recognized
-technical terms in the available description. A sparse posting can score highly
-on limited evidence, so the shortlist also requires at least two criteria and
-one direct match and a recent source sighting. Sponsorship, degree level, language, funding, and deadline
-checks remain separate. Missing or ambiguous evidence is shown as unknown.
-Open the official posting to confirm the complete requirements before applying.
+## Agents and skills
 
-## Prepare a selected job locally
+Agents describe who does the work. Skills define the workflow and what evidence to return. These definitions support interactive Codex sessions. The Python commands above run without launching them.
 
-Use the [example engine setting](examples/tailor-engine.example.yaml) to create
-`tailor_engine.yaml` in private storage. Set `root` to the absolute path to your
-separate, trusted application workspace. It must contain the existing
-`job-application-tailor` skill, its résumé-only validator, your verified
-candidate facts, and your master LaTeX template. Run
-`python -m job_scout check-tailor` to check the connection.
+| Agent | Skill | Responsibility |
+| --- | --- | --- |
+| [`industry_scout`](.codex/agents/industry-scout.toml) | [`discover-jobs`](.agents/skills/discover-jobs/SKILL.md) | Finds public industry postings using the supplied titles, aliases, locations, and filters. |
+| [`research_scout`](.codex/agents/research-scout.toml) | [`discover-jobs`](.agents/skills/discover-jobs/SKILL.md) | Finds research and PhD postings and records stated deadlines, degree requirements, and funding. |
+| [`evidence_matcher`](.codex/agents/evidence-matcher.toml) | [`score-jobs`](.agents/skills/score-jobs/SKILL.md) | Connects posting requirements to supplied evidence IDs and flags gaps and eligibility unknowns. |
+| Existing private application team | [`prepare-selected-job`](.agents/skills/prepare-selected-job/SKILL.md) → `job-application-tailor` | Rechecks the selected posting and hands it to the existing Orchestrator, Researcher/Matcher, Writer, and independent four-lens Reviewer Panel. The local scripts enforce the PDF gates. |
 
-1. Choose a job ID from the private ranking report and run
-   `python -m job_scout select-job JOB_ID`. Job Scout checks the selected
-   posting against the official feed and refuses a posting it cannot verify.
-2. Open the generated `START_HERE.md` in the private application folder. Run
-   the existing Orchestrator, Writer, and separate Reviewer Panel with those
-   inputs. The handoff does not call a model service. Use a local model runtime
-   for drafting and review if those inputs must stay entirely on your device.
-3. Follow the local `tailor-stage` commands in the handoff to freeze the
-   review snapshot, compile only after a current independent PASS, and validate
-   the final PDF after rendered visual review. Only a verified package is
-   recorded as `Prepared` in local tracking. Submit it yourself.
+The private application engine owns the résumé template, evidence rules, and review process. The public repo provides the handoff and fictional examples.
 
-Selecting the unchanged posting again reuses its handoff. A revised posting
-gets a separate version. Application files and tracking live outside both
-Git checkouts.
+## Prepare a selected job
 
-## Test
+1. Copy the [example engine setting](examples/tailor-engine.example.yaml) to `tailor_engine.yaml` in private storage. Set `root` to your existing, trusted application workspace. It needs the `job-application-tailor` skill, its résumé-only validator, a verified facts file, and a master LaTeX résumé.
+2. Run `python -m job_scout check-tailor`. Pick an ID from the private report and run `python -m job_scout select-job JOB_ID`. Job Scout verifies the official listing before creating a private application folder.
+3. Open the generated `START_HERE.md` and start the existing Writer and Reviewer workflow. Use a local model runtime if résumé drafting and review must stay on-device. The handoff itself runs no model.
+4. Follow the `tailor-stage` commands in the handoff. They freeze the review snapshot, require an independent PASS before compilation, and validate the PDF after visual review. Only a verified one-page A4 résumé is marked **Prepared** in private tracking.
 
-Run `python -m unittest discover -s tests -v`. The tests use fictional data.
+Selecting an unchanged posting reuses its handoff. A revised posting gets its own version. You submit applications yourself.
 
-[Report a security issue privately](SECURITY.md).
+## Privacy and storage
+
+| Location | Contents |
+| --- | --- |
+| **Public checkout** | Python code, Codex roles, workflow instructions, and fictional examples and tests. |
+| **Private data folder** | Search preferences, watchlist, engine settings, SQLite database, ranking reports, application workspaces, PDFs, and tracking. |
+| **Existing private application workspace** | Candidate facts, master LaTeX résumé, and the original writing, review, and validation workflow. |
+
+Collection and selected-job checks use public source endpoints. Ranking reads local files. Job Scout rejects private storage paths inside the public checkout, including symlinks into it. Generated applications and tracking stay outside both Git checkouts.
+
+## Test and contribute
+
+Run `python -m unittest discover -s tests -v` after installing dependencies. The tests use fictional data and cover source parsing, deduplication, evidence matching, eligibility, and the private handoff. See [repository instructions](AGENTS.md), the [MIT license](LICENSE), and [private security reporting](SECURITY.md).
+
+**Next milestone:** local scheduling, daily shortlists, and alerts for new strong matches.
