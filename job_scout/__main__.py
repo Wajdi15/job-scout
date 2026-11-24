@@ -17,7 +17,13 @@ def main() -> int:
     collect = commands.add_parser("collect-jobs", help="fetch configured public job sources")
     rank = commands.add_parser("rank-jobs", help="rank collected postings against private evidence")
     rank.add_argument("--candidate-facts", help="absolute path to verified candidate facts YAML")
-    for command in (check, init, validate, collect, rank):
+    check_tailor = commands.add_parser("check-tailor", help="check the private résumé workflow")
+    select = commands.add_parser("select-job", help="recheck and hand off one selected job")
+    select.add_argument("job_id", type=int)
+    stage = commands.add_parser("tailor-stage", help="run an existing local résumé quality gate")
+    stage.add_argument("stage", choices=("snapshot", "compile", "validate"))
+    stage.add_argument("application_dir")
+    for command in (check, init, validate, collect, rank, check_tailor, select, stage):
         command.add_argument("--data-dir", default=os.environ.get("JOB_SCOUT_DATA_DIR"))
     args = parser.parse_args()
 
@@ -25,6 +31,18 @@ def main() -> int:
         if args.command == "check-data-dir":
             private_data_dir(args.data_dir)
             print("Private data directory is outside the checkout.")
+        elif args.command in ("check-tailor", "select-job", "tailor-stage"):
+            from .tailoring import load_engine, run_stage, select_job
+
+            if args.command == "check-tailor":
+                load_engine(args.data_dir)
+                print("The existing private Writer, Reviewer Panel, and résumé scripts are available.")
+            elif args.command == "select-job":
+                folder = select_job(args.job_id, args.data_dir)
+                print(f"Selected job rechecked. Open {folder / 'START_HERE.md'} to start the private workflow.")
+            else:
+                run_stage(args.stage, args.application_dir, args.data_dir)
+                print("Prepared and tracked locally." if args.stage == "validate" else f"Local {args.stage} passed.")
         elif args.command == "rank-jobs":
             from .ranking import rank_jobs
 

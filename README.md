@@ -2,7 +2,7 @@
 
 An open-source project for finding job openings, explaining the fit against verified experience, and preparing a reviewed résumé for a job you select.
 
-Job Scout includes Codex roles, private search profiles, public job feed collection, and local job rankings. Scheduling and résumé generation are planned.
+Job Scout includes Codex roles, private search profiles, public job feed collection, local job rankings, and a handoff to an existing private résumé workflow. Scheduling is planned.
 
 ## Set up privately
 
@@ -72,6 +72,31 @@ on limited evidence, so the shortlist also requires at least two criteria and
 one direct match and a recent source sighting. Sponsorship, degree level, language, funding, and deadline
 checks remain separate. Missing or ambiguous evidence is shown as unknown.
 Open the official posting to confirm the complete requirements before applying.
+
+## Prepare a selected job locally
+
+Use the [example engine setting](examples/tailor-engine.example.yaml) to create
+`tailor_engine.yaml` in private storage. Set `root` to the absolute path to your
+separate, trusted application workspace. It must contain the existing
+`job-application-tailor` skill, its résumé-only validator, your verified
+candidate facts, and your master LaTeX template. Run
+`python -m job_scout check-tailor` to check the connection.
+
+1. Choose a job ID from the private ranking report and run
+   `python -m job_scout select-job JOB_ID`. Job Scout checks the selected
+   posting against the official feed and refuses a posting it cannot verify.
+2. Open the generated `START_HERE.md` in the private application folder. Run
+   the existing Orchestrator, Writer, and separate Reviewer Panel with those
+   inputs. The handoff does not call a model service. Use a local model runtime
+   for drafting and review if those inputs must stay entirely on your device.
+3. Follow the local `tailor-stage` commands in the handoff to freeze the
+   review snapshot, compile only after a current independent PASS, and validate
+   the final PDF after rendered visual review. Only a verified package is
+   recorded as `Prepared` in local tracking. Submit it yourself.
+
+Selecting the unchanged posting again reuses its handoff. A revised posting
+gets a separate version. Application files and tracking live outside both
+Git checkouts.
 
 ## Test
 

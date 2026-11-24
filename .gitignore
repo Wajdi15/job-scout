@@ -26,3 +26,5 @@ job_sources.yaml
 ranked_jobs.html
 ranked_jobs.json
 .ranking-*
+tailor_engine.yaml
+.tailor-*
